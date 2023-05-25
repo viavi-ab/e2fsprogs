@@ -1,0 +1,33 @@
+#! /bin/sh
+
+[ -f sanitized_e2.img ] || unzstd --sparse sanitized_e2.img.zst
+
+tar cf - sanitized_e2.img --sparse --transform 's,sanitized_e2.img,work.img,' | tar xf - --sparse # same as "cp --sparse=always" but also works on busybox (requi
+
+rm -f stat.before extents.before \
+      stat.after  extents.after
+
+debugfs -R 'stat large_file' work.img > stat.before
+debugfs -R 'extents large_file' work.img > extents.before
+
+e2fsck -f -p work.img
+if [ $? -gt 3 ]; then
+  echo "first e2fsck failed"
+  exit 1
+fi
+
+if ! resize2fs work.img 1500000000k; then
+  echo "resize2fs failed"
+  exit 1
+fi
+
+e2fsck -f -p work.img
+if [ $? -le 3 ]; then
+  echo "second e2fsck succeeded"
+  exit
+fi
+
+echo "second e2fsck failed"
+e2fsck -f -n work.img
+debugfs -R 'stat large_file' work.img > stat.after
+debugfs -R 'extents large_file' work.img > extents.after
