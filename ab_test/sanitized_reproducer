@@ -2,7 +2,7 @@
 
 [ -f sanitized_e2.img ] || unzstd --sparse sanitized_e2.img.zst
 
-tar cf - sanitized_e2.img --sparse --transform 's,sanitized_e2.img,work.img,' | tar xf - --sparse # same as "cp --sparse=always" but also works on busybox (requi
+tar cf - sanitized_e2.img --sparse --transform 's,sanitized_e2.img,work.img,' | tar xf - --sparse # same as "cp --sparse=always" but also works on busybox (requires gnu tar)
 
 rm -f stat.before extents.before \
       stat.after  extents.after
