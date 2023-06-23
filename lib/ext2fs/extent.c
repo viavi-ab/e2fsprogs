@@ -1439,21 +1439,49 @@ errcode_t ext2fs_extent_set_bmap(ext2_extent_handle_t handle,
 		retval = ext2fs_extent_fix_parents(handle);
 		if (retval)
 			goto done;
-	} else if ((logical == extent.e_lblk) && (extent.e_len == 1))  {
+	} else if (logical == extent.e_lblk) {
 #ifdef DEBUG
-		printf("(re/un)mapping only block in extent\n");
+		printf("(re/un)mapping first block in extent\n");
 #endif
 		if (physical) {
-			retval = ext2fs_extent_replace(handle, 0, &newextent);
-		} else {
-			retval = ext2fs_extent_delete(handle, 0);
+			if (has_prev &&
+			    (logical == (prev_extent.e_lblk +
+					 prev_extent.e_len)) &&
+			    (physical == (prev_extent.e_pblk +
+					  prev_extent.e_len)) &&
+			    (new_uninit == prev_uninit) &&
+			    ((int) prev_extent.e_len < max_len-1)) {
+				retval = ext2fs_extent_get(handle, 
+					EXT2_EXTENT_PREV_LEAF, &prev_extent);
+				if (retval)
+					goto done;
+				prev_extent.e_len++;
+				retval = ext2fs_extent_replace(handle, 0,
+							       &prev_extent);
+			} else
+				retval = ext2fs_extent_insert(handle,
+							      0, &newextent);
 			if (retval)
 				goto done;
-			ec = ext2fs_extent_fix_parents(handle);
-			if (ec != EXT2_ET_NO_CURRENT_NODE)
-				retval = ec;
+			retval = ext2fs_extent_fix_parents(handle);
+			if (retval)
+				goto done;
+			retval = ext2fs_extent_get(handle,
+						   EXT2_EXTENT_NEXT_LEAF,
+						   &extent);
+			if (retval)
+				goto done;
 		}
-
+		extent.e_pblk++;
+		extent.e_lblk++;
+		extent.e_len--;
+		if (extent.e_len)
+			retval = ext2fs_extent_replace(handle, 0, &extent);
+		else
+			retval = ext2fs_extent_delete(handle, 0);
+		if (retval)
+			goto done;
+		retval = ext2fs_extent_fix_parents(handle);
 		if (retval)
 			goto done;
 	} else if (logical == extent.e_lblk + extent.e_len - 1)  {
@@ -1500,50 +1528,10 @@ errcode_t ext2fs_extent_set_bmap(ext2_extent_handle_t handle,
 			if (retval)
 				goto done;
 		}
-		extent.e_len--;
-		retval = ext2fs_extent_replace(handle, 0, &extent);
-		if (retval)
-			goto done;
-	} else if (logical == extent.e_lblk) {
-#ifdef DEBUG
-		printf("(re/un)mapping first block in extent\n");
-#endif
-		if (physical) {
-			if (has_prev &&
-			    (logical == (prev_extent.e_lblk +
-					 prev_extent.e_len)) &&
-			    (physical == (prev_extent.e_pblk +
-					  prev_extent.e_len)) &&
-			    (new_uninit == prev_uninit) &&
-			    ((int) prev_extent.e_len < max_len-1)) {
-				retval = ext2fs_extent_get(handle, 
-					EXT2_EXTENT_PREV_LEAF, &prev_extent);
-				if (retval)
-					goto done;
-				prev_extent.e_len++;
-				retval = ext2fs_extent_replace(handle, 0,
-							       &prev_extent);
-			} else
-				retval = ext2fs_extent_insert(handle,
-							      0, &newextent);
-			if (retval)
-				goto done;
-			retval = ext2fs_extent_fix_parents(handle);
-			if (retval)
-				goto done;
-			retval = ext2fs_extent_get(handle,
-						   EXT2_EXTENT_NEXT_LEAF,
-						   &extent);
-			if (retval)
-				goto done;
-		}
-		extent.e_pblk++;
-		extent.e_lblk++;
-		extent.e_len--;
-		retval = ext2fs_extent_replace(handle, 0, &extent);
-		if (retval)
-			goto done;
-		retval = ext2fs_extent_fix_parents(handle);
+		if (--extent.e_len)
+			retval = ext2fs_extent_replace(handle, 0, &extent);
+		else
+			retval = ext2fs_extent_delete(handle, 0);
 		if (retval)
 			goto done;
 	} else {
